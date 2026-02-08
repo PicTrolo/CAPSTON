@@ -67,7 +67,7 @@ with st.form("payment_form"):
     )
 
     proof_file = st.file_uploader(
-        "Upload Photo of Receipt / Screenshot (optional)",
+        "Upload Photo of Receipt / Screenshot",
         type=["png", "jpg", "jpeg"]
     )
 
