@@ -65,15 +65,15 @@ if df.empty:
     st.info("No data found yet in the Tracker sheet.")
     st.stop()
 
-# --- Try to find columns by your expected headers ---
-COL_TIMESTAMP = "Timestamp"
-COL_UNIT = "Unit Number"
-COL_NAME = "Full Name"
-COL_AMOUNT = "Amount"
-COL_DATE = "Date"
-COL_MODE = "Mode"
-COL_PROOF = "Proof URL"
-COL_NOTES = "Notes"
+# Find columns by expected headers
+COL_TIMESTAMP = "timestamp"
+COL_UNIT = "unit_number"
+COL_NAME = "tenant_name"
+COL_AMOUNT = "amount_paid"
+COL_DATE = "payment_date"
+COL_MODE = "payment_mode"
+COL_PROOF = "proof_file_url"
+COL_NOTES = "notes"
 
 headers_lower = {str(c).strip().lower(): c for c in df.columns}
 
