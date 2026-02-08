@@ -6,20 +6,34 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timezone, timedelta
 
-# Fail-safe pandas import so the whole app doesn't brick
+# Fail-safe pandas import (prevents bricking)
 try:
     import pandas as pd
 except Exception as e:
     st.title("📊 Rent Payments Dashboard")
-    st.error("Dashboard dependency missing: pandas failed to import.")
-    st.write("Fix: add pandas to requirements.txt and redeploy.")
-    st.write("Error details:")
+    st.error("Dashboard cannot start because pandas failed to import.")
     st.code(str(e))
     st.stop()
 
-# Password gate (reads from secrets)
-DASHBOARD_PASSWORD = st.secrets["DASHBOARD_PASSWORD"]
+# Secrets fail-safe (prevents bricking)
+DASHBOARD_PASSWORD = st.secrets.get("DASHBOARD_PASSWORD", "")
+SHEET_ID = st.secrets.get("SHEET_ID", "")
+WORKSHEET_NAME = st.secrets.get("WORKSHEET_NAME", "Tracker")
+GOOGLE_SA = st.secrets.get("google_service_account", None)
 
+if not DASHBOARD_PASSWORD:
+    st.title("📊 Rent Payments Dashboard")
+    st.error("Missing secret: DASHBOARD_PASSWORD")
+    st.write("Add this in Streamlit Secrets:")
+    st.code('DASHBOARD_PASSWORD = "capstonoplantalaan"')
+    st.stop()
+
+if not SHEET_ID or not GOOGLE_SA:
+    st.title("📊 Rent Payments Dashboard")
+    st.error("Missing Google Sheets secrets (SHEET_ID and/or [google_service_account]).")
+    st.stop()
+
+# Password gate
 if "dashboard_auth" not in st.session_state:
     st.session_state.dashboard_auth = False
 
@@ -33,17 +47,12 @@ if not st.session_state.dashboard_auth:
         st.stop()
 
 APP_TZ = timezone(timedelta(hours=8))  # Asia/Manila
-
-SHEET_ID = st.secrets["SHEET_ID"]
-WORKSHEET_NAME = st.secrets.get("WORKSHEET_NAME", "Tracker")
-GOOGLE_SA = dict(st.secrets["google_service_account"])
-
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 
 @st.cache_resource(show_spinner=False)
 def get_gspread_client():
-    creds = Credentials.from_service_account_info(GOOGLE_SA, scopes=SCOPES)
+    creds = Credentials.from_service_account_info(dict(GOOGLE_SA), scopes=SCOPES)
     return gspread.authorize(creds)
 
 
@@ -70,7 +79,7 @@ if df.empty:
     st.info("No data found yet in the Tracker sheet.")
     st.stop()
 
-# Column mapping (matches actual sheet headers)
+# Actual sheet headers
 COL_TIMESTAMP = "timestamp"
 COL_UNIT = "unit_number"
 COL_NAME = "tenant_name"
@@ -80,44 +89,19 @@ COL_MODE = "payment_mode"
 COL_PROOF = "proof_file_url"
 COL_NOTES = "notes"
 
-# Fallback mapping in case headers change slightly
-headers_lower = {str(c).strip().lower(): c for c in df.columns}
-
-def col_or_fallback(primary, fallbacks):
-    if primary in df.columns:
-        return primary
-    for f in fallbacks:
-        key = str(f).strip().lower()
-        if key in headers_lower:
-            return headers_lower[key]
-    return primary
-
-COL_TIMESTAMP = col_or_fallback(COL_TIMESTAMP, ["timestamp", "submitted timestamp", "time"])
-COL_UNIT = col_or_fallback(COL_UNIT, ["unit", "unit number", "unit_no", "unit_number"])
-COL_NAME = col_or_fallback(COL_NAME, ["full name", "name", "tenant name", "tenant_name"])
-COL_AMOUNT = col_or_fallback(COL_AMOUNT, ["amount", "amount paid", "amount (₱)", "amount_paid"])
-COL_DATE = col_or_fallback(COL_DATE, ["date", "payment date", "date of payment", "payment_date"])
-COL_MODE = col_or_fallback(COL_MODE, ["mode", "payment mode", "payment_mode"])
-COL_PROOF = col_or_fallback(COL_PROOF, ["proof", "proof url", "receipt", "receipt link", "proof_file_url"])
-COL_NOTES = col_or_fallback(COL_NOTES, ["notes", "remarks"])
-
-# If any key columns are missing, show a helpful message (instead of crashing)
+# Make sure required columns exist
 required = [COL_UNIT, COL_AMOUNT, COL_DATE]
 missing = [c for c in required if c not in df.columns]
 if missing:
     st.error("Dashboard cannot find required columns in your sheet header row.")
-    st.write("Missing columns:")
-    st.write(missing)
-    st.write("Your sheet columns are:")
-    st.write(list(df.columns))
+    st.write("Missing columns:", missing)
+    st.write("Your sheet columns are:", list(df.columns))
     st.stop()
 
-# Clean + type conversions
 df[COL_AMOUNT] = df[COL_AMOUNT].apply(to_float_safe)
 df["_payment_date"] = pd.to_datetime(df[COL_DATE], errors="coerce").dt.date
 df["_unit_clean"] = df[COL_UNIT].astype(str).str.strip()
 
-# This month filter
 today = datetime.now(APP_TZ).date()
 month_start = today.replace(day=1)
 
@@ -144,21 +128,17 @@ k1.metric("Collections this month", f"₱ {total_collected_month:,.2f}")
 k2.metric("Total collected (all time)", f"₱ {total_collected_all:,.2f}")
 
 st.divider()
-
-# Payment Table
 st.subheader("Payment Table")
 
 display_cols = [c for c in [COL_TIMESTAMP, COL_UNIT, COL_NAME, COL_AMOUNT, COL_DATE, COL_MODE, COL_PROOF, COL_NOTES] if c in df_filtered.columns]
 table_df = df_filtered[display_cols].copy()
 
-# Sort by timestamp (best-effort)
 if COL_TIMESTAMP in table_df.columns:
     table_df["_ts_sort"] = pd.to_datetime(table_df[COL_TIMESTAMP], errors="coerce")
     table_df = table_df.sort_values("_ts_sort", ascending=False).drop(columns=["_ts_sort"])
 
 st.dataframe(table_df, use_container_width=True, hide_index=True)
 
-# Export CSV
 csv_bytes = table_df.to_csv(index=False).encode("utf-8")
 st.download_button(
     "Export CSV",
