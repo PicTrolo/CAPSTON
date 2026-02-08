@@ -1,9 +1,10 @@
-# pages/1_Dashboard.py
 import streamlit as st
 import gspread
 import pandas as pd
 from google.oauth2.service_account import Credentials
 from datetime import datetime, timezone, timedelta
+
+st.set_page_config(page_title="Dashboard", page_icon="📊", layout="wide")
 
 # Dashboard Password Gate
 DASHBOARD_PASSWORD = st.secrets["DASHBOARD_PASSWORD"]
@@ -20,9 +21,6 @@ if not st.session_state.dashboard_auth:
         st.rerun()
     else:
         st.stop()
-
-# Page Config
-st.set_page_config(page_title="Dashboard", page_icon="📊", layout="wide")
 
 APP_TZ = timezone(timedelta(hours=8))  # Asia/Manila
 
@@ -71,8 +69,6 @@ if df.empty:
     st.stop()
 
 # Column mapping (match your Sheet headers)
-# Expected headers:
-# Timestamp | Unit Number | Full Name | Amount | Date | Mode | Proof URL | Notes
 COL_TIMESTAMP = "Timestamp"
 COL_UNIT = "Unit Number"
 COL_NAME = "Full Name"
@@ -82,7 +78,6 @@ COL_MODE = "Mode"
 COL_PROOF = "Proof URL"
 COL_NOTES = "Notes"
 
-# Fallback mapping in case your header text differs slightly
 headers_lower = {str(c).strip().lower(): c for c in df.columns}
 
 def col_or_fallback(primary, fallbacks):
@@ -92,7 +87,7 @@ def col_or_fallback(primary, fallbacks):
         key = str(f).strip().lower()
         if key in headers_lower:
             return headers_lower[key]
-    return primary  # last resort (may KeyError later if truly missing)
+    return primary
 
 COL_TIMESTAMP = col_or_fallback(COL_TIMESTAMP, ["timestamp", "submitted timestamp", "time"])
 COL_UNIT = col_or_fallback(COL_UNIT, ["unit", "unit number", "unit_no"])
@@ -103,13 +98,11 @@ COL_MODE = col_or_fallback(COL_MODE, ["mode", "payment mode"])
 COL_PROOF = col_or_fallback(COL_PROOF, ["proof", "proof url", "receipt", "receipt link"])
 COL_NOTES = col_or_fallback(COL_NOTES, ["notes", "remarks"])
 
-# Clean + type conversions
 df[COL_AMOUNT] = df[COL_AMOUNT].apply(to_float_safe)
 
 df["_payment_date"] = pd.to_datetime(df[COL_DATE], errors="coerce").dt.date
 df["_unit_clean"] = df[COL_UNIT].astype(str).str.strip()
 
-# This month filter
 today = datetime.now(APP_TZ).date()
 month_start = today.replace(day=1)
 
@@ -119,7 +112,6 @@ df_month = df[
     & (df["_payment_date"] <= today)
 ].copy()
 
-# Filter by unit
 units = sorted([u for u in df["_unit_clean"].dropna().unique() if str(u).strip() != ""])
 selected_unit = st.selectbox("Filter by Unit (optional)", ["All"] + units, index=0)
 
@@ -128,7 +120,6 @@ if selected_unit != "All":
 else:
     df_filtered = df.copy()
 
-# KPIs
 total_collected_all = float(df[COL_AMOUNT].sum())
 total_collected_month = float(df_month[COL_AMOUNT].sum())
 
@@ -138,7 +129,6 @@ k2.metric("Total collected (all time)", f"₱ {total_collected_all:,.2f}")
 
 st.divider()
 
-# Payment Table
 st.subheader("Payment Table")
 
 display_cols = []
@@ -148,14 +138,12 @@ for c in [COL_TIMESTAMP, COL_UNIT, COL_NAME, COL_AMOUNT, COL_DATE, COL_MODE, COL
 
 table_df = df_filtered[display_cols].copy()
 
-# Sort by timestamp (best-effort)
 if COL_TIMESTAMP in table_df.columns:
     table_df["_ts_sort"] = pd.to_datetime(table_df[COL_TIMESTAMP], errors="coerce")
     table_df = table_df.sort_values("_ts_sort", ascending=False).drop(columns=["_ts_sort"])
 
 st.dataframe(table_df, use_container_width=True, hide_index=True)
 
-# Export CSV
 csv_bytes = table_df.to_csv(index=False).encode("utf-8")
 st.download_button(
     label="Export CSV",
