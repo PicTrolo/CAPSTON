@@ -1,7 +1,16 @@
 [project]
 name = "rent-form-app"
 version = "0.1.0"
-description = "Add your description here"
+description = "Web-based rent payment recording app for capstone project"
 readme = "README.md"
-requires-python = ">=3.13"
-dependencies = []
+requires-python = ">=3.11"
+
+dependencies = [
+    "streamlit",
+    "gspread",
+    "google-auth",
+    "google-auth-oauthlib",
+    "google-auth-httplib2",
+    "python-dotenv",
+    "pillow"
+]
