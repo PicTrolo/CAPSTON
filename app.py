@@ -16,19 +16,18 @@ st.write(
     "Kung nahihirapan, maaari pong humingi ng tulong sa kapamilya."
 )
 
-# -----------------------------
+
 # 1) Read settings from .env
-# -----------------------------
 SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME")
 SERVICE_ACCOUNT_FILE = os.getenv("SERVICE_ACCOUNT_FILE")
 
-# -----------------------------
+
 # 2) Connect to Google Sheets
-#    This authenticates using your service account JSON file.
-# -----------------------------
+    # authenticates using your service account JSON file.
+
 def connect_to_sheet():
-    # These are the permissions ("scopes") your app is requesting.
-    # - spreadsheets: lets the app read/write Google Sheets
+    # Permissions ("scopes") your app is requesting.
+    # spreadsheets: lets the app read/write Google Sheets
     scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
@@ -40,22 +39,21 @@ def connect_to_sheet():
     )
     client = gspread.authorize(creds)
 
-    # Open your Google Sheet by name, then use the first worksheet (tab).
+    # opens Google Sheet by name, then use the first worksheet (tab).
     sheet = client.open(SHEET_NAME).sheet1
     return sheet
 
-# -----------------------------
+
 # 3) Helper: Append one row to Google Sheet
-# -----------------------------
+
 def append_payment_row(sheet, row_values):
     # Appends the row to the bottom of the sheet.
-    # This is like "adding a new submission record".
+    # "adding a new submission record".
     sheet.append_row(row_values, value_input_option="USER_ENTERED")
 
-# -----------------------------
 # 4) Build a simple, elderly-friendly form
-#    Streamlit's st.form groups inputs and adds a single Submit button.
-# -----------------------------
+    # Streamlit's st.form groups inputs and adds a single Submit button.
+
 with st.form("payment_form"):
     st.subheader("Payment Details")
 
@@ -97,11 +95,10 @@ with st.form("payment_form"):
 
     submitted = st.form_submit_button("Submit Payment")
 
-# -----------------------------
+
 # 5) Validate + write to Google Sheet
-# -----------------------------
 if submitted:
-    # Basic validation: keep it strict but friendly.
+    # Basic validation: strict but friendly.
     if not unit_number.strip():
         st.error("Please enter your Unit Number.")
         st.stop()
@@ -118,7 +115,7 @@ if submitted:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # For now, we will store proof_file_url as blank.
-    # In the next section, I’ll show you how to upload the image to Drive
+    # Next section, shows how to upload the image to Drive
     # and put the link here.
     proof_file_url = ""
 
