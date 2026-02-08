@@ -1,11 +1,8 @@
+import json
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime, date
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
 
 st.set_page_config(page_title="Rent Payment Record", page_icon="🧾", layout="centered")
 
@@ -17,43 +14,29 @@ st.write(
 )
 
 
-# 1) Read settings from .env
-SHEET_NAME = os.getenv("GOOGLE_SHEET_NAME")
-SERVICE_ACCOUNT_FILE = os.getenv("SERVICE_ACCOUNT_FILE")
-
-
-# 2) Connect to Google Sheets
-    # authenticates using your service account JSON file.
-
+# Google Sheets Connection (Streamlit Cloud via st.secrets)
 def connect_to_sheet():
-    # Permissions ("scopes") your app is requesting.
-    # spreadsheets: lets the app read/write Google Sheets
     scopes = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-]
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
 
-    creds = Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=scopes
-    )
+    # st.secrets["SERVICE_ACCOUNT_JSON"] should be a JSON string
+    service_account_info = json.loads(st.secrets["SERVICE_ACCOUNT_JSON"])
+    creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
     client = gspread.authorize(creds)
 
-    # opens Google Sheet by name, then use the first worksheet (tab).
-    sheet = client.open(SHEET_NAME).sheet1
-    return sheet
+    sheet_id = st.secrets["1LeB7qqbe7rBRbz60qWCS2cf2zdIK6yYn1_2mL2-awto"]    # e.g. "1LeB7qqbe7rBRbz60qWCS2cf2zdIK6yYn1_2mL2-awto"
+    worksheet_name = st.secrets["Tracker"]    # e.g. "Tracker"
 
-
-# 3) Helper: Append one row to Google Sheet
+    sh = client.open_by_key(sheet_id)
+    return sh.worksheet(worksheet_name)
 
 def append_payment_row(sheet, row_values):
-    # Appends the row to the bottom of the sheet.
-    # "adding a new submission record".
     sheet.append_row(row_values, value_input_option="USER_ENTERED")
 
-# 4) Build a simple, elderly-friendly form
-    # Streamlit's st.form groups inputs and adds a single Submit button.
 
+# Form UI
 with st.form("payment_form"):
     st.subheader("Payment Details")
 
@@ -96,9 +79,8 @@ with st.form("payment_form"):
     submitted = st.form_submit_button("Submit Payment")
 
 
-# 5) Validate + write to Google Sheet
+# Submit Logic
 if submitted:
-    # Basic validation: strict but friendly.
     if not unit_number.strip():
         st.error("Please enter your Unit Number.")
         st.stop()
@@ -111,15 +93,11 @@ if submitted:
         st.error("Please enter a valid Amount Paid (greater than 0).")
         st.stop()
 
-    # Timestamp helps with tracking and sorting records.
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # For now, we will store proof_file_url as blank.
-    # Next section, shows how to upload the image to Drive
-    # and put the link here.
+    # If you haven't implemented Drive upload yet, keep this blank
     proof_file_url = ""
 
-    # Prepare row in the SAME order as your sheet headers.
     row = [
         timestamp,
         unit_number.strip(),
