@@ -7,4 +7,3 @@ google-api-python-client==2.160.0
 python-dotenv==1.0.1
 pillow==11.1.0
 cloudinary==1.44.1
-pandas==2.2.2
