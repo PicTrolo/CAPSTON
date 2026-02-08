@@ -1,11 +1,12 @@
-import io
 import re
 import streamlit as st
 import gspread
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+
+import cloudinary
+import cloudinary.uploader
+
 
 st.set_page_config(page_title="Rent Payment Record", page_icon="🧾", layout="centered")
 
@@ -16,91 +17,77 @@ st.write(
     "Kung nahihirapan, maaari pong humingi ng tulong sa kapamilya."
 )
 
+APP_TZ = timezone(timedelta(hours=8))  # Asia/Manila
+
 
 # Config from Streamlit Secrets
-SHEET_ID = st.secrets["SHEET_ID"]  # <-- (in Streamlit Secrets)
-WORKSHEET_NAME = st.secrets["WORKSHEET_NAME"]  # <-- (in Streamlit Secrets, "Tracker")
-DRIVE_FOLDER_ID = st.secrets["DRIVE_FOLDER_ID"]  # <-- (added in Streamlit Secrets)
-GOOGLE_SA = st.secrets["google_service_account"]  # <-- (in Streamlit Secrets, already set)
+SHEET_ID = st.secrets["SHEET_ID"]
+WORKSHEET_NAME = st.secrets["WORKSHEET_NAME"]  # "Tracker"
+GOOGLE_SA = dict(st.secrets["google_service_account"])
+
+CLOUDINARY_CLOUD_NAME = st.secrets["CLOUDINARY_CLOUD_NAME"]
+CLOUDINARY_API_KEY = st.secrets["CLOUDINARY_API_KEY"]
+CLOUDINARY_API_SECRET = st.secrets["CLOUDINARY_API_SECRET"]
 
 
-# Google auth + clients
+# Google Sheets auth + client
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
 ]
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def get_creds():
     return Credentials.from_service_account_info(GOOGLE_SA, scopes=SCOPES)
 
-@st.cache_resource
+@st.cache_resource(show_spinner=False)
 def get_gspread_client():
     return gspread.authorize(get_creds())
-
-@st.cache_resource
-def get_drive_service():
-    return build("drive", "v3", credentials=get_creds())
 
 def connect_to_sheet():
     client = get_gspread_client()
     sh = client.open_by_key(SHEET_ID)
     return sh.worksheet(WORKSHEET_NAME)
 
+def append_payment_row(sheet, row_values):
+    sheet.append_row(row_values, value_input_option="USER_ENTERED")
 
-# Helpers
+
+# Cloudinary setup + helpers
+cloudinary.config(
+    cloud_name=CLOUDINARY_CLOUD_NAME,
+    api_key=CLOUDINARY_API_KEY,
+    api_secret=CLOUDINARY_API_SECRET,
+    secure=True,
+)
+
 def safe_filename(text: str) -> str:
-    text = text.strip()
+    text = (text or "").strip()
     text = re.sub(r"\s+", "_", text)
     text = re.sub(r"[^A-Za-z0-9_\-]", "", text)
     return text or "UNKNOWN_UNIT"
 
-def upload_receipt_to_drive(uploaded_file, unit_number: str, ts_for_name: str) -> str:
-    if not uploaded_file:
+def upload_receipt_to_cloudinary(uploaded_file, unit_number: str, ts_for_name: str) -> str:
+    """
+    Uploads the Streamlit UploadedFile to Cloudinary and returns a public HTTPS URL.
+    Filename format: <UNIT_NUMBER>_<YYYY-MM-DD_HHMMSS>
+    Stored under Cloudinary folder: rent_receipts/
+    """
+    if uploaded_file is None:
         return ""
 
-    drive = get_drive_service()
-
-    original_name = uploaded_file.name or "receipt"
-    ext = ""
-    if "." in original_name:
-        ext = "." + original_name.split(".")[-1].lower()
-
     unit_safe = safe_filename(unit_number)
-    filename = f"{unit_safe}_{ts_for_name}{ext}"
+    public_id = f"{unit_safe}_{ts_for_name}"
 
-    file_metadata = {
-        "name": filename,
-        "parents": [DRIVE_FOLDER_ID],
-    }
-
-    file_bytes = uploaded_file.getvalue()
-    media = MediaIoBaseUpload(
-        io.BytesIO(file_bytes),
-        mimetype=uploaded_file.type or "application/octet-stream",
-        resumable=False,
+    result = cloudinary.uploader.upload(
+        uploaded_file,
+        folder="rent_receipts",
+        public_id=public_id,
+        resource_type="image",
+        overwrite=False,
+        unique_filename=False,
     )
 
-    created = drive.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields="id",
-        supportsAllDrives=True,
-    ).execute()
-
-    file_id = created["id"]
-
-    drive.permissions().create(
-        fileId=file_id,
-        body={"type": "anyone", "role": "reader"},
-        fields="id",
-        supportsAllDrives=True,
-    ).execute()
-
-    return f"https://drive.google.com/file/d/{file_id}/view?usp=sharing"
-
-def append_payment_row(sheet, row_values):
-    sheet.append_row(row_values, value_input_option="USER_ENTERED")
+    return result.get("secure_url", "")
 
 
 # Form UI
@@ -135,7 +122,7 @@ with st.form("payment_form"):
 
     proof_file = st.file_uploader(
         "Upload Photo of Receipt / Screenshot (optional)",
-        type=["png", "jpg", "jpeg"]
+        type=["png", "jpg", "jpeg", "webp"]
     )
 
     notes = st.text_area(
@@ -160,11 +147,12 @@ if submitted:
         st.error("Please enter a valid Amount Paid (greater than 0).")
         st.stop()
 
-    timestamp_display = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    timestamp_for_filename = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    now_dt = datetime.now(APP_TZ)
+    timestamp_display = now_dt.strftime("%Y-%m-%d %H:%M:%S")
+    timestamp_for_filename = now_dt.strftime("%Y-%m-%d_%H%M%S")
 
     try:
-        proof_file_url = upload_receipt_to_drive(
+        proof_file_url = upload_receipt_to_cloudinary(
             proof_file,
             unit_number=unit_number.strip(),
             ts_for_name=timestamp_for_filename
