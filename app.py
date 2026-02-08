@@ -26,11 +26,11 @@ def connect_to_sheet():
     creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
     client = gspread.authorize(creds)
 
-    sheet_id = st.secrets["1LeB7qqbe7rBRbz60qWCS2cf2zdIK6yYn1_2mL2-awto"]    # e.g. "1LeB7qqbe7rBRbz60qWCS2cf2zdIK6yYn1_2mL2-awto"
-    worksheet_name = st.secrets["Tracker"]    # e.g. "Tracker"
+    sheet_id = st.secrets["SHEET_ID"]
+    worksheet_name = st.secrets["WORKSHEET_NAME"]
 
-    sh = client.open_by_key(sheet_id)
-    return sh.worksheet(worksheet_name)
+    sh = client.open_by_key(sheet_id)  # e.g. "1LeB7qqbe7rBRbz60qWCS2cf2zdIK6yYn1_2mL2-awto"
+    return sh.worksheet(worksheet_name) # e.g. "Tracker"
 
 def append_payment_row(sheet, row_values):
     sheet.append_row(row_values, value_input_option="USER_ENTERED")
