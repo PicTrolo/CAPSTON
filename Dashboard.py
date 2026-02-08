@@ -6,13 +6,12 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime, timezone, timedelta
 
 # Dashboard Password Gate
-DASHBOARD_PASSWORD = "capstonoplantalaan"
+DASHBOARD_PASSWORD = st.secrets["DASHBOARD_PASSWORD"]
 
 if "dashboard_auth" not in st.session_state:
     st.session_state.dashboard_auth = False
 
 if not st.session_state.dashboard_auth:
-    st.set_page_config(page_title="Dashboard (Locked)", page_icon="🔒", layout="wide")
     st.title("🔒 Admin Access Required")
     pwd = st.text_input("Enter dashboard password", type="password")
 
