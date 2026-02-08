@@ -22,7 +22,7 @@ def connect_to_sheet():
     ]
 
     # st.secrets["SERVICE_ACCOUNT_JSON"] should be a JSON string
-    service_account_info = json.loads(st.secrets["SERVICE_ACCOUNT_JSON"])
+    service_account_info = dict(st.secrets["google_service_account"])
     creds = Credentials.from_service_account_info(service_account_info, scopes=scopes)
     client = gspread.authorize(creds)
 
